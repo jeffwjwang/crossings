@@ -1,0 +1,31 @@
+{
+  "dailySetId": "2026-12-01-ponsonby",
+  "date": "2026-12-01",
+  "note": "Local sample. Easy and Medium are playable. Hard and Super Hard are reserved slots for the same neighbourhood.",
+  "slots": [
+    {
+      "difficulty": "easy",
+      "puzzleId": "2026-12-01-ponsonby-easy",
+      "file": "sample-ponsonby-easy.json",
+      "available": true
+    },
+    {
+      "difficulty": "medium",
+      "puzzleId": "2026-12-01-ponsonby-medium",
+      "file": "sample-ponsonby.json",
+      "available": true
+    },
+    {
+      "difficulty": "hard",
+      "puzzleId": "2026-12-01-ponsonby-hard",
+      "file": null,
+      "available": false
+    },
+    {
+      "difficulty": "super_hard",
+      "puzzleId": "2026-12-01-ponsonby-super-hard",
+      "file": null,
+      "available": false
+    }
+  ]
+}
