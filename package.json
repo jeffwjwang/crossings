@@ -10,7 +10,7 @@
     "sample": "tsx scripts/build-sample.ts",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "vitest run && node --test apps/mobile/scripts/eas-update-lib.test.mjs",
     "test:watch": "vitest"
   },
   "devDependencies": {

@@ -23,21 +23,9 @@ import type { Palette } from '../ui/theme';
 function useSkiaReady(): boolean {
   const [ready, setReady] = useState(Platform.OS !== 'web');
   useEffect(() => {
-    if (Platform.OS !== 'web') return undefined;
-    let live = true;
-    void (async () => {
-      try {
-        const web = await import('@shopify/react-native-skia/lib/module/web');
-        if (typeof web.LoadSkiaWeb === 'function') await web.LoadSkiaWeb();
-      } catch {
-        // Expo's web bundle often loads CanvasKit for us.
-      }
-      if (live) setReady(true);
-    })();
-    return () => {
-      live = false;
-    };
-  }, []);
+    if (ready) return;
+    setReady(typeof Skia.PathBuilder?.Make === 'function');
+  }, [ready]);
   return ready;
 }
 

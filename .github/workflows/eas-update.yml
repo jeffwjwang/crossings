@@ -1,0 +1,91 @@
+name: Publish to Expo Go
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: eas-update-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.token.outputs.present }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for EXPO_TOKEN
+        id: token
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "EXPO_TOKEN is not set yet. Skipping the preview update."
+              echo "present=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::Add the GitHub secret EXPO_TOKEN. The README has the steps."
+            exit 1
+          fi
+          echo "present=true" >> "$GITHUB_OUTPUT"
+
+      - uses: pnpm/action-setup@v4
+        if: steps.token.outputs.present == 'true'
+        with:
+          version: 10.33.4
+
+      - uses: actions/setup-node@v4
+        if: steps.token.outputs.present == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.token.outputs.present == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup EAS
+        if: steps.token.outputs.present == 'true'
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Publish update
+        if: steps.token.outputs.present == 'true'
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_TELEMETRY: "1"
+          UPDATE_MESSAGE: ${{ github.sha }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            bash ./scripts/publish-expo-go.sh preview
+          else
+            bash ./scripts/publish-expo-go.sh production
+          fi
+
+      - name: Upload play page
+        if: steps.token.outputs.present == 'true' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/mobile/play-site
+
+  deploy:
+    needs: publish
+    if: needs.publish.result == 'success' && github.ref == 'refs/heads/main' && needs.publish.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy play page
+        id: deployment
+        uses: actions/deploy-pages@v4
