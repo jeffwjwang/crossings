@@ -29,30 +29,29 @@ eas update \
   --non-interactive \
   --json > "${RUNNER_TEMP:-/tmp}/eas-update.json"
 
-if [[ "$CHANNEL" == "production" ]]; then
-  OUT="${PLAY_SITE_DIR:-play-site}"
-  node ./scripts/write-play-page.mjs production "$OUT" > /dev/null
-  OPEN_URL="$(sed -n '1p' "$OUT/link.txt")"
-  QR_URL="$(sed -n '2p' "$OUT/link.txt")"
-  echo "Expo Go URL: $OPEN_URL"
-  echo "QR image: $QR_URL"
-  if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-    {
-      echo "### Crossings is ready to play"
-      echo
-      echo "Scan this with the iPhone camera, then tap **Open in Expo Go**."
-      echo
-      echo "![QR code](${QR_URL})"
-      echo
+OUT="${PLAY_SITE_DIR:-play-site}"
+node ./scripts/write-play-page.mjs "$CHANNEL" "$OUT" > /dev/null
+OPEN_URL="$(sed -n '1p' "$OUT/link.txt")"
+QR_URL="$(sed -n '2p' "$OUT/link.txt")"
+npx --yes qrcode@1.5.4 -o "$OUT/qr.png" "$OPEN_URL"
+echo "Expo Go URL: $OPEN_URL"
+echo "QR image: $QR_URL"
+echo "QR file: $OUT/qr.png"
+if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+  {
+    echo "### Crossings is ready to play ($CHANNEL)"
+    echo
+    echo "Scan this with the iPhone camera, then tap **Open in Expo Go**."
+    echo
+    echo "![QR code](${QR_URL})"
+    echo
+    if [[ "$CHANNEL" == "production" ]]; then
       echo "Bookmark: https://jeffwjwang.github.io/crossings/"
       echo
-      echo "Direct link: \`$OPEN_URL\`"
-    } >> "$GITHUB_STEP_SUMMARY"
-  fi
-else
-  OPEN_URL="$(node ./scripts/write-play-page.mjs "$CHANNEL" "${RUNNER_TEMP:-/tmp}/preview-site")"
-  echo "Preview URL: $OPEN_URL"
-  if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-    echo "Preview update (this pull request only): \`$OPEN_URL\`" >> "$GITHUB_STEP_SUMMARY"
-  fi
+    else
+      echo "This is the pull-request preview. The bookmark QR is only updated from main."
+      echo
+    fi
+    echo "Direct link: \`$OPEN_URL\`"
+  } >> "$GITHUB_STEP_SUMMARY"
 fi
