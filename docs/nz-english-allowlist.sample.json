@@ -1,0 +1,13 @@
+{
+  "note": "Sample only. The live allowlist is approved by Jeff one entry at a time. AOTEAROA is here because the Ponsonby sample uses it.",
+  "entries": [
+    {
+      "answer": "AOTEAROA",
+      "display": "Aotearoa",
+      "category": "place",
+      "origin": "maori_origin_nz_english",
+      "approved": false,
+      "reason": "Used by the bundled sample. Needs Jeff's approval before the pipeline may reuse it."
+    }
+  ]
+}
