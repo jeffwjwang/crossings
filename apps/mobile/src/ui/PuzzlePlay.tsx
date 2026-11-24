@@ -6,7 +6,7 @@ import * as Speech from 'expo-speech';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, AppState, Dimensions, Share, StyleSheet, Text, View } from 'react-native';
 import { Pressable, ScrollView } from 'react-native-gesture-handler';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { loadPuzzle } from '../api/loader';
 import { SAMPLE_NUMBER } from '../content/catalog';
@@ -49,6 +49,7 @@ export function PuzzlePlay({ puzzleId }: { puzzleId: string }) {
   const settings = useSettings();
   const colors = palette(settings.highContrast);
   const scale = settings.textScale;
+  const insets = useSafeAreaInsets();
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
   const [secret, setSecret] = useState<PuzzleSecret | null>(null);
   const [ctx, setCtx] = useState<GameContext | null>(null);
@@ -227,8 +228,8 @@ export function PuzzlePlay({ puzzleId }: { puzzleId: string }) {
     solvedCount(state) >= where.askAfterSolvedCount;
   const windowHeight = Dimensions.get('window').height;
   const windowWidth = Dimensions.get('window').width;
-  const mapHeight = windowHeight < 740 ? 150 : Math.min(188, Math.round(windowHeight * 0.24));
-  const letterWidth = windowWidth < 380 ? 36 : 40;
+  const mapHeight = windowHeight < 700 ? 136 : windowHeight < 840 ? 156 : 168;
+  const letterWidth = windowWidth < 380 ? 34 : 40;
 
   const reset = () => {
     Alert.alert('Start again?', 'This clears your letters for this puzzle.', [
@@ -246,7 +247,7 @@ export function PuzzlePlay({ puzzleId }: { puzzleId: string }) {
   };
 
   return (
-    <SafeAreaView style={[styles.fill, { backgroundColor: colors.panel }]}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.fill, { backgroundColor: colors.panel }]}>
       <View style={[styles.header, { backgroundColor: colors.night }]}>
         <Pressable accessibilityLabel="Back" onPress={() => router.back()} style={styles.back}>
           <Text style={styles.backText}>‹ Today</Text>
@@ -341,9 +342,11 @@ export function PuzzlePlay({ puzzleId }: { puzzleId: string }) {
               })}
             </ScrollView>
           </Animated.View>
-          <Text style={[styles.feedback, { color: state.feedback?.tone === 'bad' ? colors.bad : colors.okDark, fontSize: font(scale, 17) }]}>
-            {state.feedback?.text ?? ''}
-          </Text>
+          {state.feedback?.text ? (
+            <Text style={[styles.feedback, { color: state.feedback.tone === 'bad' ? colors.bad : colors.okDark, fontSize: font(scale, 17) }]}>
+              {state.feedback.text}
+            </Text>
+          ) : null}
           <View style={styles.actions}>
             <Pressable
               testID="speak"
@@ -359,8 +362,8 @@ export function PuzzlePlay({ puzzleId }: { puzzleId: string }) {
               onPress={() => dispatch({ type: 'hint' })}
               style={[styles.secondary, { borderColor: colors.line, opacity: hintsLeft === 0 ? 0.45 : 1 }]}
             >
-              <Text style={[styles.actionText, { fontSize: font(scale, 18) }]}>
-                Hint{hintsLeft == null ? '' : ` · ${hintsLeft} left`}
+              <Text numberOfLines={1} style={[styles.actionText, { fontSize: font(scale, 17) }]}>
+                Hint{hintsLeft == null ? '' : ` · ${hintsLeft}`}
               </Text>
             </Pressable>
             <Pressable testID="check" accessibilityLabel="Check" onPress={() => dispatch({ type: 'check' })} style={styles.primary}>
@@ -378,15 +381,17 @@ export function PuzzlePlay({ puzzleId }: { puzzleId: string }) {
             ))}
           </View>
         ) : null}
-        <Pressable onPress={() => setStreetsOpen((open) => !open)} style={styles.streetsToggle}>
-          <Text style={[styles.streetsTitle, { fontSize: font(scale, 18) }]}>
-            {streetsOpen ? 'Hide streets' : 'Streets to explore'}
-          </Text>
-        </Pressable>
+        <View style={styles.toolRow}>
+          <Pressable onPress={() => setStreetsOpen((open) => !open)} style={[styles.tool, { borderColor: colors.line }]}>
+            <Text style={[styles.actionText, { fontSize: font(scale, 16) }]}>
+              {streetsOpen ? 'Hide streets' : 'Streets'}
+            </Text>
+          </Pressable>
+          <Pressable onPress={reset} style={[styles.tool, { borderColor: colors.line }]}>
+            <Text style={[styles.actionText, { fontSize: font(scale, 16) }]}>Start again</Text>
+          </Pressable>
+        </View>
         {streetsOpen ? <View style={{ gap: 8 }}>{puzzle.words.map((item, index) => renderStreet(item.id, index))}</View> : null}
-        <Pressable onPress={reset} style={[styles.secondary, { borderColor: colors.line, marginTop: 8 }]}>
-          <Text style={styles.actionText}>Start again</Text>
-        </Pressable>
       </ScrollView>
       {card ? (
         <View style={styles.card}>
@@ -427,10 +432,18 @@ export function PuzzlePlay({ puzzleId }: { puzzleId: string }) {
           <Text style={styles.primaryText}>Map complete — where was I?</Text>
         </Pressable>
       ) : null}
-      <View style={[styles.keyboardDock, { backgroundColor: colors.panel, borderTopColor: colors.line }]}>
+      <View
+        style={[
+          styles.keyboardDock,
+          {
+            backgroundColor: colors.panel,
+            borderTopColor: colors.line,
+            paddingBottom: Math.max(insets.bottom, 8),
+          },
+        ]}
+      >
         <Keyboard
           colors={colors}
-          scale={scale}
           onKey={(letter) => dispatch({ type: 'type', letter })}
           onDelete={() => dispatch({ type: 'backspace' })}
         />
@@ -531,12 +544,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  feedback: { minHeight: 24, fontFamily: 'AtkinsonBold', marginTop: 6 },
+  feedback: { fontFamily: 'AtkinsonBold', marginTop: 6 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   primary: {
     flexGrow: 1,
-    flexBasis: 108,
-    minHeight: 48,
+    flexBasis: 0,
+    minWidth: 0,
+    minHeight: 44,
     backgroundColor: '#ffcf33',
     borderRadius: 12,
     alignItems: 'center',
@@ -546,8 +560,9 @@ const styles = StyleSheet.create({
   primaryText: { fontFamily: 'AtkinsonBold', fontSize: 18, color: '#16130f' },
   secondary: {
     flexGrow: 1,
-    flexBasis: 108,
-    minHeight: 48,
+    flexBasis: 0,
+    minWidth: 0,
+    minHeight: 44,
     backgroundColor: '#fff',
     borderWidth: 2,
     borderRadius: 12,
@@ -559,16 +574,27 @@ const styles = StyleSheet.create({
   guess: { backgroundColor: '#fff', borderRadius: 14, padding: 12, gap: 8, borderWidth: 2, borderColor: '#16130f' },
   guessTitle: { fontFamily: 'AtkinsonBold' },
   guessOption: { minHeight: 48, borderWidth: 2, borderColor: '#16130f', borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-  streetsToggle: { minHeight: 44, justifyContent: 'center' },
-  streetsTitle: { fontFamily: 'AtkinsonBold' },
+  toolRow: { flexDirection: 'row', gap: 8 },
+  tool: {
+    flexGrow: 1,
+    flexBasis: 0,
+    minHeight: 44,
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
   streetRow: { paddingVertical: 8, paddingHorizontal: 8, borderRadius: 8 },
   keyboardDock: {
+    flexShrink: 0,
     paddingHorizontal: 8,
     paddingTop: 6,
-    paddingBottom: 4,
     borderTopWidth: 1,
   },
   card: {
+    flexShrink: 1,
     marginHorizontal: 12,
     marginBottom: 6,
     maxHeight: 168,

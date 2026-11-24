@@ -1,7 +1,7 @@
 import { whereAmIHash } from '@crossings/puzzle-schema';
 import { describe, expect, it } from 'vitest';
 
-import { buildContext, createInitialState, isDiscovered, isLocked, reduce, solvedCount } from './logic';
+import { buildContext, createInitialState, isDiscovered, isLocked, reduce, solvedCount, wrongCells } from './logic';
 import { buildShareText } from './share';
 import type { PlayablePuzzle } from './types';
 
@@ -76,12 +76,18 @@ describe('crossings and discovery', () => {
 });
 
 describe('check modes', () => {
-  it('marks a wrong letter immediately on easy, and a wrong word on medium', () => {
+  it('keeps a wrong easy letter until Check, and marks a wrong word on medium', () => {
     const easy = play('per_letter');
     const typed = reduce(easy.ctx, easy.state, { type: 'type', letter: 'Z' });
     expect(typed.entries[0]).toBe('Z');
-    expect(typed.feedback?.tone).toBe('bad');
-    expect(typed.wrongChecks).toBe(0);
+    expect(typed.feedback).toBeNull();
+    expect(typed.cursor).toBe(1);
+    expect(wrongCells(easy.ctx, typed)).toEqual([]);
+    const checked = reduce(easy.ctx, typed, { type: 'check' });
+    expect(checked.entries[0]).toBe('Z');
+    expect(checked.feedback?.tone).toBe('bad');
+    expect(checked.feedback?.text).not.toMatch(/not on this square/);
+    expect(wrongCells(easy.ctx, checked)).toEqual([0]);
 
     const medium = play('per_word');
     let state = reduce(medium.ctx, medium.state, { type: 'type', letter: 'Z' });
@@ -248,6 +254,7 @@ describe('correcting letters', () => {
     expect(state.entries[0]).toBe('Z');
     expect(state.entries[1]).toBe('A');
     expect(state.cursor).toBe(2);
+    expect(state.feedback).toBeNull();
     state = reduce(ctx, state, { type: 'backspace' });
     expect(state.entries[0]).toBeUndefined();
     expect(state.entries[1]).toBe('A');

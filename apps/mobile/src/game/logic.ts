@@ -268,16 +268,11 @@ function evaluateWord(ctx: GameContext, state: GameState, wordId: string, explic
 
 export function wrongCells(ctx: GameContext, state: GameState): number[] {
   if (ctx.puzzle.rules.checkMode === 'end_only') return [];
-  const wordId = state.currentWordId;
-  if (!state.feedback || state.feedback.tone !== 'bad') {
-    if (ctx.puzzle.rules.checkMode !== 'per_letter') return [];
-  }
-  const cells = ctx.wordById.get(wordId)?.cellIds ?? [];
+  if (state.feedback?.tone !== 'bad') return [];
+  const cells = ctx.wordById.get(state.currentWordId)?.cellIds ?? [];
   return cells.filter((cellId) => {
     const got = state.entries[cellId];
-    if (!got || got === ctx.letterByCell[cellId]) return false;
-    if (ctx.puzzle.rules.checkMode === 'per_letter') return true;
-    return state.feedback?.tone === 'bad';
+    return Boolean(got) && got !== ctx.letterByCell[cellId];
   });
 }
 
@@ -297,10 +292,6 @@ function typeLetter(ctx: GameContext, state: GameState, raw: string): GameState 
   next.cursor = nextTypingCursor(ctx, next, wordId, index) ?? index;
   next.feedback = null;
   next.cardWordId = null;
-  if (ctx.puzzle.rules.checkMode === 'per_letter' && letter !== ctx.letterByCell[cellId]) {
-    next.feedback = { tone: 'bad', text: 'That letter is not on this square.' };
-    next.failNonce += 1;
-  }
   if (wordIsFilled(ctx, next, wordId)) return evaluateWord(ctx, next, wordId, false);
   return next;
 }

@@ -6,7 +6,7 @@ export const DIFFICULTY_PRESETS: Record<
 > = {
   easy: {
     label: 'Easy',
-    summary: 'A few short streets. Each letter is checked as you type. Hints are unlimited.',
+    summary: 'A few short streets. Type freely, then tap Check. Hints are unlimited.',
     maxHints: null,
     preRevealRatio: 0.2,
     checkMode: 'per_letter',
