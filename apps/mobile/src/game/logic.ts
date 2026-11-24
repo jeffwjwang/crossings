@@ -33,8 +33,8 @@ export function isDiscovered(ctx: GameContext, state: GameState, wordId: string)
   });
 }
 
+/** A cell is locked only after one of its streets is fully solved. Given letters stay editable. */
 export function isLocked(ctx: GameContext, state: GameState, cellId: number): boolean {
-  if (state.prefilled[cellId]) return true;
   const cell = ctx.cellById.get(cellId);
   return cell?.wordIds.some((wordId) => state.solved[wordId]) ?? false;
 }
@@ -104,11 +104,70 @@ function firstWritable(ctx: GameContext, state: GameState, wordId: string): numb
   return 0;
 }
 
-function writableFrom(ctx: GameContext, state: GameState, wordId: string, from: number): number | null {
-  const cells = ctx.wordById.get(wordId)?.cellIds ?? [];
-  for (let index = from; index < cells.length; index += 1) {
+function cellIdsOf(ctx: GameContext, wordId: string): number[] {
+  return ctx.wordById.get(wordId)?.cellIds ?? [];
+}
+
+function unlockedIndexes(ctx: GameContext, state: GameState, wordId: string): number[] {
+  return cellIdsOf(ctx, wordId)
+    .map((cellId, index) => (isLocked(ctx, state, cellId) ? -1 : index))
+    .filter((index) => index >= 0);
+}
+
+/** Next editable square at or after `from`, wrapping to the start of the word. */
+function editableAt(ctx: GameContext, state: GameState, wordId: string, from: number): number | null {
+  const open = unlockedIndexes(ctx, state, wordId);
+  if (open.length === 0) return null;
+  return open.find((index) => index >= from) ?? open[0] ?? null;
+}
+
+/** Next unlocked square strictly after `after`. Does not wrap. */
+function nextUnlocked(ctx: GameContext, state: GameState, wordId: string, after: number): number | null {
+  return unlockedIndexes(ctx, state, wordId).find((index) => index > after) ?? null;
+}
+
+/**
+ * Where the caret goes after a letter. Skips given letters that have not been
+ * edited, so Backspace deletes the letter just typed instead of a gift letter.
+ * Does not wrap, so the last letter stays selected and can be corrected.
+ */
+function nextTypingCursor(ctx: GameContext, state: GameState, wordId: string, after: number): number | null {
+  const cells = cellIdsOf(ctx, wordId);
+  return (
+    unlockedIndexes(ctx, state, wordId).find((index) => {
+      if (index <= after) return false;
+      const cellId = cells[index];
+      return cellId != null && !state.prefilled[cellId];
+    }) ?? null
+  );
+}
+
+/** Square a key writes into. The active square if it can be edited, otherwise the next open one. */
+function writeIndex(ctx: GameContext, state: GameState, wordId: string): number | null {
+  const cellId = cellIdsOf(ctx, wordId)[state.cursor];
+  if (cellId != null && !isLocked(ctx, state, cellId)) return state.cursor;
+  return editableAt(ctx, state, wordId, state.cursor);
+}
+
+function previousEditable(ctx: GameContext, state: GameState, wordId: string, before: number): number | null {
+  const open = unlockedIndexes(ctx, state, wordId);
+  for (let i = open.length - 1; i >= 0; i -= 1) {
+    const index = open[i];
+    if (index != null && index < before) return index;
+  }
+  return null;
+}
+
+/** Previous square Backspace may clear. Given letters are left alone unless they are the selected square. */
+function previousDeletable(ctx: GameContext, state: GameState, wordId: string, before: number): number | null {
+  const cells = cellIdsOf(ctx, wordId);
+  const open = unlockedIndexes(ctx, state, wordId);
+  for (let i = open.length - 1; i >= 0; i -= 1) {
+    const index = open[i];
+    if (index == null || index >= before) continue;
     const cellId = cells[index];
-    if (cellId != null && !isLocked(ctx, state, cellId)) return index;
+    if (cellId == null || state.prefilled[cellId]) continue;
+    return index;
   }
   return null;
 }
@@ -227,15 +286,15 @@ function typeLetter(ctx: GameContext, state: GameState, raw: string): GameState 
   if (!/^[A-Z]$/.test(letter)) return state;
   const wordId = state.currentWordId;
   if (state.solved[wordId] || state.completed) return state;
-  const index = writableFrom(ctx, state, wordId, state.cursor);
+  const index = writeIndex(ctx, state, wordId);
   if (index == null) return state;
-  const cells = ctx.wordById.get(wordId)?.cellIds ?? [];
-  const cellId = cells[index];
+  const cellId = cellIdsOf(ctx, wordId)[index];
   if (cellId == null) return state;
   const next = copyState(state);
   next.entries[cellId] = letter;
   next.hinted[cellId] = false;
-  next.cursor = writableFrom(ctx, next, wordId, index + 1) ?? index;
+  next.prefilled[cellId] = false;
+  next.cursor = nextTypingCursor(ctx, next, wordId, index) ?? index;
   next.feedback = null;
   next.cardWordId = null;
   if (ctx.puzzle.rules.checkMode === 'per_letter' && letter !== ctx.letterByCell[cellId]) {
@@ -248,30 +307,33 @@ function typeLetter(ctx: GameContext, state: GameState, raw: string): GameState 
 
 function backspace(ctx: GameContext, state: GameState): GameState {
   const wordId = state.currentWordId;
-  if (state.solved[wordId]) return state;
-  const cells = ctx.wordById.get(wordId)?.cellIds ?? [];
+  if (state.solved[wordId] || state.completed) return state;
+  const cells = cellIdsOf(ctx, wordId);
   const next = copyState(state);
-  let index = state.cursor;
-  const currentId = cells[index];
-  if (currentId != null && !isLocked(ctx, state, currentId) && state.entries[currentId]) {
+  const currentId = cells[state.cursor];
+  const currentEditable = currentId != null && !isLocked(ctx, state, currentId);
+  if (currentEditable && state.entries[currentId] && !state.prefilled[currentId]) {
     delete next.entries[currentId];
     next.hinted[currentId] = false;
+    next.prefilled[currentId] = false;
+    const previous = previousDeletable(ctx, next, wordId, state.cursor);
+    if (previous != null) next.cursor = previous;
+  } else if (currentEditable && state.entries[currentId] && state.prefilled[currentId]) {
+    delete next.entries[currentId];
+    next.hinted[currentId] = false;
+    next.prefilled[currentId] = false;
   } else {
-    let previous = index - 1;
-    while (previous >= 0) {
-      const id = cells[previous];
-      if (id != null && !isLocked(ctx, state, id)) break;
-      previous -= 1;
-    }
-    if (previous < 0) return state;
-    index = previous;
-    const id = cells[index];
+    const previous = previousDeletable(ctx, state, wordId, state.cursor);
+    if (previous == null) return state;
+    const id = cells[previous];
     if (id == null) return state;
     delete next.entries[id];
     next.hinted[id] = false;
-    next.cursor = index;
+    next.prefilled[id] = false;
+    next.cursor = previous;
   }
   next.feedback = null;
+  next.cardWordId = null;
   return next;
 }
 
@@ -293,13 +355,13 @@ export function reduce(ctx: GameContext, state: GameState, action: GameAction): 
     case 'backspace':
       return backspace(ctx, state);
     case 'move': {
-      const cells = ctx.wordById.get(state.currentWordId)?.cellIds ?? [];
-      let index = state.cursor;
-      do {
-        index += action.delta;
-      } while (index >= 0 && index < cells.length && isLocked(ctx, state, cells[index] ?? -1));
-      if (index < 0 || index >= cells.length) return state;
-      return { ...state, cursor: index };
+      const wordId = state.currentWordId;
+      const target =
+        action.delta < 0
+          ? previousEditable(ctx, state, wordId, state.cursor)
+          : nextUnlocked(ctx, state, wordId, state.cursor);
+      if (target == null || target === state.cursor) return state;
+      return { ...state, cursor: target };
     }
     case 'check': {
       if (state.solved[state.currentWordId]) {
@@ -338,11 +400,16 @@ export function reduce(ctx: GameContext, state: GameState, action: GameAction): 
     }
     case 'select': {
       if (!isDiscovered(ctx, state, action.wordId)) return state;
-      const length = ctx.wordById.get(action.wordId)?.cellIds.length ?? 1;
-      const index =
+      const cells = cellIdsOf(ctx, action.wordId);
+      const length = cells.length || 1;
+      let index =
         action.index == null
           ? firstWritable(ctx, state, action.wordId)
           : Math.max(0, Math.min(length - 1, action.index));
+      const chosen = cells[index];
+      if (chosen != null && isLocked(ctx, state, chosen)) {
+        index = editableAt(ctx, state, action.wordId, index) ?? index;
+      }
       return {
         ...state,
         currentWordId: action.wordId,

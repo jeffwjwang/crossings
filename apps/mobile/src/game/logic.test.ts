@@ -46,7 +46,7 @@ describe('crossings and discovery', () => {
   it('shares a crossing letter and locks it once one street is solved', () => {
     const { ctx, state: initial } = play();
     expect(initial.entries[2]).toBe('T');
-    expect(isLocked(ctx, initial, 2)).toBe(true);
+    expect(isLocked(ctx, initial, 2)).toBe(false);
     expect(isDiscovered(ctx, initial, 'b')).toBe(false);
 
     let state = reduce(ctx, initial, { type: 'select', wordId: 'a', index: 0 });
@@ -128,6 +128,148 @@ describe('check modes', () => {
     expect(done.completed).toBe(true);
     expect(reduce(ctx, done, { type: 'guessWhere', option: 'Ponsonby' }).whereAmIGuess).toBeNull();
     expect(solvedCount(done)).toBe(2);
+  });
+});
+
+describe('correcting letters', () => {
+  it('overwrites a wrong letter in the selected square', () => {
+    const { ctx, state: initial } = play('per_word');
+    let state = reduce(ctx, initial, { type: 'type', letter: 'Z' });
+    expect(state.entries[0]).toBe('Z');
+    state = reduce(ctx, state, { type: 'select', wordId: 'a', index: 0 });
+    state = reduce(ctx, state, { type: 'type', letter: 'C' });
+    expect(state.entries[0]).toBe('C');
+    expect(state.cursor).toBe(1);
+  });
+
+  it('backspace deletes the current letter and steps back', () => {
+    const { ctx, state: initial } = play('per_word');
+    let state = reduce(ctx, initial, { type: 'type', letter: 'Z' });
+    state = reduce(ctx, state, { type: 'type', letter: 'Q' });
+    expect(state.entries[0]).toBe('Z');
+    expect(state.entries[1]).toBe('Q');
+    state = reduce(ctx, state, { type: 'backspace' });
+    expect(state.entries[1]).toBeUndefined();
+    expect(state.cursor).toBe(0);
+    state = reduce(ctx, state, { type: 'backspace' });
+    expect(state.entries[0]).toBeUndefined();
+  });
+
+  it('keeps accepting letters when the caret is already on the last square', () => {
+    const { ctx, state: initial } = play('per_word');
+    let state = reduce(ctx, initial, { type: 'type', letter: 'Z' });
+    state = reduce(ctx, state, { type: 'type', letter: 'Q' });
+    expect(state.cursor).toBe(1);
+    state = reduce(ctx, state, { type: 'type', letter: 'A' });
+    expect(state.entries[1]).toBe('A');
+    expect(state.entries[0]).toBe('Z');
+    expect(state.cursor).toBe(1);
+  });
+
+  it('backspace on an empty square deletes the previous letter', () => {
+    const { ctx, state: initial } = play('per_word');
+    let state = reduce(ctx, initial, { type: 'type', letter: 'Z' });
+    expect(state.cursor).toBe(1);
+    expect(state.entries[1]).toBeUndefined();
+    state = reduce(ctx, state, { type: 'backspace' });
+    expect(state.entries[0]).toBeUndefined();
+    expect(state.cursor).toBe(0);
+  });
+
+  it('still enters a letter when the cursor is sitting on a solved crossing', () => {
+    const ctx = buildContext(
+      {
+        id: 'cross',
+        startWordId: 'a',
+        rules: {
+          maxHints: null,
+          preRevealRatio: 0,
+          checkMode: 'per_word',
+          showWordLengthOnMap: true,
+          targetSeconds: 100,
+        },
+        cells: [
+          { id: 0, wordIds: ['a', 'b'], preRevealed: false },
+          { id: 1, wordIds: ['a'], preRevealed: false },
+          { id: 2, wordIds: ['b'], preRevealed: false },
+          { id: 3, wordIds: ['b'], preRevealed: false },
+        ],
+        words: [
+          { id: 'a', cellIds: [0, 1] },
+          { id: 'b', cellIds: [0, 2, 3] },
+        ],
+      },
+      { a: 'CA', b: 'CXY' },
+    );
+    let state = createInitialState(ctx);
+    state = reduce(ctx, state, { type: 'type', letter: 'C' });
+    state = reduce(ctx, state, { type: 'type', letter: 'A' });
+    expect(state.solved.a).toBe(true);
+    expect(state.solved.b).toBe(false);
+    expect(isLocked(ctx, state, 0)).toBe(true);
+    expect(isLocked(ctx, state, 2)).toBe(false);
+
+    state = reduce(ctx, state, { type: 'select', wordId: 'b', index: 0 });
+    expect(state.cursor).not.toBe(0);
+    state = reduce(ctx, state, { type: 'type', letter: 'Z' });
+    expect(state.entries[0]).toBe('C');
+    expect(state.entries[2]).toBe('Z');
+    state = reduce(ctx, state, { type: 'select', wordId: 'b', index: 1 });
+    state = reduce(ctx, state, { type: 'type', letter: 'X' });
+    expect(state.entries[2]).toBe('X');
+    expect(state.entries[0]).toBe('C');
+  });
+
+  it('skips a given letter when moving on, and Backspace removes the letter just typed', () => {
+    const ctx = buildContext(
+      {
+        id: 'gift',
+        startWordId: 'a',
+        rules: {
+          maxHints: null,
+          preRevealRatio: 0,
+          checkMode: 'per_word',
+          showWordLengthOnMap: true,
+          targetSeconds: 100,
+        },
+        cells: [
+          { id: 0, wordIds: ['a'], preRevealed: false },
+          { id: 1, wordIds: ['a'], preRevealed: true },
+          { id: 2, wordIds: ['a'], preRevealed: false },
+        ],
+        words: [{ id: 'a', cellIds: [0, 1, 2] }],
+      },
+      { a: 'CAT' },
+    );
+    let state = createInitialState(ctx);
+    expect(state.entries[1]).toBe('A');
+    expect(isLocked(ctx, state, 1)).toBe(false);
+    state = reduce(ctx, state, { type: 'type', letter: 'Z' });
+    expect(state.entries[0]).toBe('Z');
+    expect(state.entries[1]).toBe('A');
+    expect(state.cursor).toBe(2);
+    state = reduce(ctx, state, { type: 'backspace' });
+    expect(state.entries[0]).toBeUndefined();
+    expect(state.entries[1]).toBe('A');
+    expect(state.cursor).toBe(0);
+    state = reduce(ctx, state, { type: 'select', wordId: 'a', index: 1 });
+    state = reduce(ctx, state, { type: 'type', letter: 'X' });
+    expect(state.entries[1]).toBe('X');
+    expect(isLocked(ctx, state, 1)).toBe(false);
+  });
+
+  it('does not lock a wrong letter after Check', () => {
+    const { ctx, state: initial } = play('per_word');
+    let state = reduce(ctx, initial, { type: 'type', letter: 'Z' });
+    state = reduce(ctx, state, { type: 'type', letter: 'Q' });
+    state = reduce(ctx, state, { type: 'check' });
+    expect(state.solved.a).toBe(false);
+    expect(isLocked(ctx, state, 0)).toBe(false);
+    expect(isLocked(ctx, state, 1)).toBe(false);
+    state = reduce(ctx, state, { type: 'select', wordId: 'a', index: 0 });
+    state = reduce(ctx, state, { type: 'type', letter: 'C' });
+    state = reduce(ctx, state, { type: 'type', letter: 'A' });
+    expect(state.solved.a).toBe(true);
   });
 });
 

@@ -165,6 +165,8 @@ export function MapCanvasView({
       originY.value = wy - event.focalY / next;
     });
   const pan = Gesture.Pan()
+    .activeOffsetX([-12, 12])
+    .activeOffsetY([-12, 12])
     .onBegin(() => {
       gestureStart.value = { x: originX.value, y: originY.value, s: scale.value };
     })

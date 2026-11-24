@@ -1,5 +1,6 @@
 import * as Haptics from 'expo-haptics';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Platform, StyleSheet, Text, View } from 'react-native';
+import { Pressable } from 'react-native-gesture-handler';
 
 import { font, type Palette } from './theme';
 
@@ -21,7 +22,9 @@ export function Keyboard({
   onKey: (letter: string) => void;
   onDelete: () => void;
 }) {
-  const keyHeight = font(scale, 54);
+  const short = Dimensions.get('window').height < 740;
+  const keyHeight = Math.min(font(scale, short ? 44 : 50), short ? 48 : 56);
+  const hitSlop = { top: 4, bottom: 4, left: 1, right: 1 };
   return (
     <View style={styles.wrap}>
       {ROWS.map((row) => (
@@ -31,6 +34,7 @@ export function Keyboard({
               key={letter}
               testID={`key-${letter}`}
               accessibilityLabel={letter}
+              hitSlop={hitSlop}
               onPress={() => {
                 tick();
                 onKey(letter);
@@ -55,6 +59,7 @@ export function Keyboard({
             key={letter}
             testID={`key-${letter}`}
             accessibilityLabel={letter}
+            hitSlop={hitSlop}
             onPress={() => {
               tick();
               onKey(letter);
@@ -70,6 +75,7 @@ export function Keyboard({
         <Pressable
           testID="key-back"
           accessibilityLabel="Delete"
+          hitSlop={hitSlop}
           onPress={() => {
             tick();
             onDelete();

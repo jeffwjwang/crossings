@@ -4,18 +4,8 @@ import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import * as Speech from 'expo-speech';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Alert,
-  Animated,
-  AppState,
-  Dimensions,
-  Pressable,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Alert, Animated, AppState, Dimensions, Share, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { loadPuzzle } from '../api/loader';
@@ -235,7 +225,10 @@ export function PuzzlePlay({ puzzleId }: { puzzleId: string }) {
     !state.completed &&
     !state.whereAmIGuess &&
     solvedCount(state) >= where.askAfterSolvedCount;
-  const mapHeight = Math.max(240, Math.round(Dimensions.get('window').height * 0.34));
+  const windowHeight = Dimensions.get('window').height;
+  const windowWidth = Dimensions.get('window').width;
+  const mapHeight = windowHeight < 740 ? 150 : Math.min(188, Math.round(windowHeight * 0.24));
+  const letterWidth = windowWidth < 380 ? 36 : 40;
 
   const reset = () => {
     Alert.alert('Start again?', 'This clears your letters for this puzzle.', [
@@ -258,8 +251,8 @@ export function PuzzlePlay({ puzzleId }: { puzzleId: string }) {
         <Pressable accessibilityLabel="Back" onPress={() => router.back()} style={styles.back}>
           <Text style={styles.backText}>‹ Today</Text>
         </Pressable>
-        <Text style={styles.progress}>
-          {solvedCount(state)} of {puzzle.words.length} streets explored
+        <Text style={styles.progress} numberOfLines={1}>
+          {solvedCount(state)}/{puzzle.words.length} streets
         </Text>
         <Pressable accessibilityLabel={listMode ? 'Show map' : 'List mode'} onPress={() => setListMode((on) => !on)}>
           <Text style={styles.backText}>{listMode ? 'Map' : 'List'}</Text>
@@ -305,7 +298,7 @@ export function PuzzlePlay({ puzzleId }: { puzzleId: string }) {
           />
         )}
       </View>
-      <ScrollView contentContainerStyle={styles.panel} keyboardShouldPersistTaps="handled">
+      <ScrollView style={styles.panelScroll} contentContainerStyle={styles.panel} keyboardShouldPersistTaps="handled">
         <View style={[styles.clue, { borderColor: colors.line }]}>
           <Text style={[styles.meta, { fontSize: font(scale, 15), color: colors.muted }]}>
             Street {wordIndex + 1} · {word.length} letters
@@ -323,10 +316,12 @@ export function PuzzlePlay({ puzzleId }: { puzzleId: string }) {
                   <Pressable
                     key={cellId}
                     testID={`letter-${index}`}
+                    hitSlop={{ top: 8, bottom: 8, left: 2, right: 2 }}
                     onPress={() => dispatch({ type: 'select', wordId: word.id, index })}
                     style={[
                       styles.letter,
                       {
+                        width: letterWidth,
                         borderColor: bad.has(cellId) ? colors.bad : colors.line,
                         backgroundColor: locked ? colors.ok : active ? colors.accent : '#fff',
                       },
@@ -383,12 +378,6 @@ export function PuzzlePlay({ puzzleId }: { puzzleId: string }) {
             ))}
           </View>
         ) : null}
-        <Keyboard
-          colors={colors}
-          scale={scale}
-          onKey={(letter) => dispatch({ type: 'type', letter })}
-          onDelete={() => dispatch({ type: 'backspace' })}
-        />
         <Pressable onPress={() => setStreetsOpen((open) => !open)} style={styles.streetsToggle}>
           <Text style={[styles.streetsTitle, { fontSize: font(scale, 18) }]}>
             {streetsOpen ? 'Hide streets' : 'Streets to explore'}
@@ -401,15 +390,17 @@ export function PuzzlePlay({ puzzleId }: { puzzleId: string }) {
       </ScrollView>
       {card ? (
         <View style={styles.card}>
-          <Text style={styles.cardKicker}>
-            Discovery {solvedCount(state)} of {puzzle.words.length}
-          </Text>
-          <Text style={[styles.cardTitle, { fontSize: font(scale, 22) }]}>{card.title}</Text>
-          <Text style={[styles.cardBody, { fontSize: font(scale, 18) }]}>
-            You uncovered {maskPlaceName(secret.streets[state.cardWordId ?? ''] ?? '', secret.locationName, state.completed)}.
-          </Text>
-          <Text style={[styles.cardBody, { fontSize: font(scale, 18) }]}>{card.body}</Text>
-          <View style={styles.actions}>
+          <ScrollView style={styles.cardScroll} contentContainerStyle={styles.cardInner}>
+            <Text style={styles.cardKicker}>
+              Discovery {solvedCount(state)} of {puzzle.words.length}
+            </Text>
+            <Text style={[styles.cardTitle, { fontSize: font(scale, 22) }]}>{card.title}</Text>
+            <Text style={[styles.cardBody, { fontSize: font(scale, 18) }]}>
+              You uncovered {maskPlaceName(secret.streets[state.cardWordId ?? ''] ?? '', secret.locationName, state.completed)}.
+            </Text>
+            <Text style={[styles.cardBody, { fontSize: font(scale, 18) }]}>{card.body}</Text>
+          </ScrollView>
+          <View style={styles.cardActions}>
             <Pressable onPress={() => dispatch({ type: 'dismissCard' })} style={[styles.secondary, { borderColor: colors.line }]}>
               <Text style={styles.actionText}>Close</Text>
             </Pressable>
@@ -436,6 +427,14 @@ export function PuzzlePlay({ puzzleId }: { puzzleId: string }) {
           <Text style={styles.primaryText}>Map complete — where was I?</Text>
         </Pressable>
       ) : null}
+      <View style={[styles.keyboardDock, { backgroundColor: colors.panel, borderTopColor: colors.line }]}>
+        <Keyboard
+          colors={colors}
+          scale={scale}
+          onKey={(letter) => dispatch({ type: 'type', letter })}
+          onDelete={() => dispatch({ type: 'backspace' })}
+        />
+      </View>
       {state.finaleVisible ? (
         <View testID="finale" style={styles.finaleScrim}>
           <View style={styles.finale}>
@@ -516,26 +515,28 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8 },
   back: { minHeight: 44, justifyContent: 'center' },
   backText: { color: '#fff', fontFamily: 'AtkinsonBold', fontSize: 17 },
-  progress: { color: '#fff', fontFamily: 'Atkinson', fontSize: 15 },
+  progress: { color: '#fff', fontFamily: 'Atkinson', fontSize: 14, flex: 1, textAlign: 'center' },
   where: { fontFamily: 'Atkinson', fontStyle: 'italic', fontSize: 16, paddingHorizontal: 12, paddingBottom: 8 },
-  panel: { padding: 12, gap: 10, paddingBottom: 28 },
+  panelScroll: { flex: 1 },
+  panel: { padding: 12, gap: 10, paddingBottom: 12 },
   clue: { backgroundColor: '#fff', borderWidth: 3, borderRadius: 14, padding: 12 },
   meta: { fontFamily: 'AtkinsonBold', textTransform: 'uppercase', letterSpacing: 0.4 },
   clueText: { fontFamily: 'Atkinson', marginVertical: 8, lineHeight: 28 },
   letters: { gap: 5, paddingVertical: 4 },
   letter: {
     width: 40,
-    height: 50,
+    height: 48,
     borderWidth: 2.5,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
   feedback: { minHeight: 24, fontFamily: 'AtkinsonBold', marginTop: 6 },
-  actions: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   primary: {
-    flex: 1,
-    minHeight: 52,
+    flexGrow: 1,
+    flexBasis: 108,
+    minHeight: 48,
     backgroundColor: '#ffcf33',
     borderRadius: 12,
     alignItems: 'center',
@@ -544,8 +545,9 @@ const styles = StyleSheet.create({
   },
   primaryText: { fontFamily: 'AtkinsonBold', fontSize: 18, color: '#16130f' },
   secondary: {
-    flex: 1,
-    minHeight: 52,
+    flexGrow: 1,
+    flexBasis: 108,
+    minHeight: 48,
     backgroundColor: '#fff',
     borderWidth: 2,
     borderRadius: 12,
@@ -560,22 +562,29 @@ const styles = StyleSheet.create({
   streetsToggle: { minHeight: 44, justifyContent: 'center' },
   streetsTitle: { fontFamily: 'AtkinsonBold' },
   streetRow: { paddingVertical: 8, paddingHorizontal: 8, borderRadius: 8 },
+  keyboardDock: {
+    paddingHorizontal: 8,
+    paddingTop: 6,
+    paddingBottom: 4,
+    borderTopWidth: 1,
+  },
   card: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 16,
+    marginHorizontal: 12,
+    marginBottom: 6,
+    maxHeight: 168,
     backgroundColor: '#fffaf0',
     borderWidth: 3,
     borderColor: '#8a6d2b',
     borderRadius: 16,
-    padding: 14,
-    gap: 6,
+    paddingBottom: 10,
   },
+  cardScroll: { maxHeight: 88 },
+  cardInner: { paddingHorizontal: 12, paddingTop: 10, gap: 4 },
+  cardActions: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingTop: 8 },
   cardKicker: { fontFamily: 'AtkinsonBold', color: '#6b4e12', fontSize: 16 },
   cardTitle: { fontFamily: 'AtkinsonBold' },
   cardBody: { fontFamily: 'Atkinson', lineHeight: 24 },
-  reopen: { position: 'absolute', left: 16, right: 16, bottom: 16, backgroundColor: '#ffcf33', minHeight: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  reopen: { marginHorizontal: 12, marginBottom: 6, backgroundColor: '#ffcf33', minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   finaleScrim: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(10,8,16,0.62)', alignItems: 'center', justifyContent: 'center', padding: 16 },
   finale: { backgroundColor: '#fffaf0', borderWidth: 4, borderColor: '#8a6d2b', borderRadius: 18, padding: 18, width: '100%', maxWidth: 480, alignItems: 'center', gap: 8 },
   finaleTitle: { fontFamily: 'AtkinsonBold' },
